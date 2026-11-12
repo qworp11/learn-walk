@@ -1,0 +1,11 @@
+# Кэши и артефакты
+research/reaf_wheel/
+research/g1_mjlab.xml
+*.pyc
+__pycache__/
+.ipynb_checkpoints/
+results/checkpoints/*.pt.tmp
+logs/
+*.mp4
+*.gif
+# Крупные бинарные датасеты в git не нужны, но csv маленькие — храним для воспроизводимости
