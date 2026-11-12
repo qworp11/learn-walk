@@ -1,15 +1,13 @@
 """S0 smoke-тест: сборка трекинг-среды, рандом-политика, бенчмарк FPS.
 
-Запуск (в WSL):
-  python /mnt/g/LEARN\ WALK/src/hlc/s0_smoke.py --nworld 256 --device cuda
+Запуск (в WSL):  python /mnt/g/LEARN\ WALK/src/hlc/s0_smoke.py --nworld 256 --device cuda
 Проверяет:
-  1) mujoco_playground + reaf + warp импортируются
-  2) G1WholeBodyTracking строится на GPU (warp impl)
-  3) рандомные действия крутятся, obs/reward вменяемы
-  4) скорость шагов/с при заданном nworld
+  1) mujoco_playground + reaf + warp импортируются, warp-ядро на Pascal
+  2) G1WholeBodyTracking строится на GPU (impl=warp)
+  3) рандомные действия крутятся через RslRlVecEnvWrapper (тот же путь, что тренировка)
+  4) скорость env-шагов/с, VRAM, NaN-проверка obs
 """
 import argparse
-import dataclasses
 import json
 import sys
 import time
@@ -25,8 +23,22 @@ def main():
     ap.add_argument("--steps", type=int, default=500)
     args = ap.parse_args()
 
-    import mujoco_playground  # noqa: F401
+    import warp as wp
+
+    # Тест warp-ядра на Pascal
+    @wp.kernel
+    def dbl(a: wp.array[float], b: wp.array[float]):
+        i = wp.tid()
+        b[i] = a[i] * 2.0
+
+    xs = wp.array([1.0, 2.0, 3.0], dtype=float, device="cuda:0")
+    ys = wp.empty_like(xs)
+    wp.launch(dbl, dim=3, inputs=[xs, ys], device="cuda:0")
+    assert ys.numpy().tolist() == [2.0, 4.0, 6.0]
+    print("warp kernel OK", wp.__version__)
+
     from mujoco_playground._src.rl import env_registry
+    from mujoco_playground._src.rl.rsl_rl import vecenv_wrapper
 
     entry = env_registry.get("G1WholeBodyTracking")
     print("== building env, nworld =", args.nworld, "device =", args.device)
@@ -34,43 +46,35 @@ def main():
     env = entry.env_builder(nworld=args.nworld, device=args.device)
     print(f"build ok in {time.time()-t0:.1f}s")
 
-    rng = np.random.default_rng(0)
-    obs = env.reset()
-    print("obs keys:", list(obs.keys()) if isinstance(obs, dict) else type(obs))
-    policy_obs = obs["policy"] if isinstance(obs, dict) else obs
-    if hasattr(policy_obs, "shape"):
-        print("policy obs shape:", tuple(policy_obs.shape))
-    else:
-        print("policy obs:", policy_obs)
+    venv = vecenv_wrapper.RslRlVecEnvWrapper(env, cfg=None)
+    print("num_actions:", venv.num_actions, "| max_ep_len:", venv.max_episode_length)
 
-    # Рандомная политика
-    n_joints = 29
+    obs_td, _ = venv.reset()
+    pol = obs_td["policy"]
+    print("policy obs shape:", tuple(pol.shape))
+
     t0 = time.time()
-    total_env_steps = 0
+    total = 0
     for i in range(args.steps):
-        action = torch.randn(args.nworld, n_joints, device=args.device) * 0.3
-        obs = env.step(action)
-        policy_obs = obs["policy"] if isinstance(obs, dict) else obs
-        total_env_steps += args.nworld
-        if i == 5:
+        action = torch.randn(args.nworld, venv.num_actions, device=args.device) * 0.3
+        obs_td, rew, done, extras = venv.step(action)
+        total += args.nworld
+        if i == 10:
             torch.cuda.synchronize()
-            t0 = time.time()  # тёплый старт
+            t0 = time.time()
     torch.cuda.synchronize()
     dt = time.time() - t0
-    env_steps_per_sec = total_env_steps / dt
-    print(f"steps/s (env): {env_steps_per_sec:,.0f}  ({args.steps} iters, {dt:.1f}s)")
+    sps = total / dt
+    print(f"env steps/s: {sps:,.0f} ({args.steps} iters in {dt:.1f}s)")
     mem = torch.cuda.max_memory_allocated() / 2**30 if torch.cuda.is_available() else 0
-    print(f"torch mem peak: {mem:.2f} GiB")
+    print(f"torch peak mem: {mem:.2f} GiB")
+    print("obs finite:", bool(torch.isfinite(pol.float()).all().item()))
+    print("rew sample:", float(rew.mean()))
 
-    # NaN-проверка наблюдений
-    if hasattr(policy_obs, "shape"):
-        finite = torch.isfinite(policy_obs.float()).all().item()
-        print("obs finite:", bool(finite))
-
-    print("SMOKE_OK")
     with open("/root/s0_smoke_result.json", "w") as f:
-        json.dump({"nworld": args.nworld, "env_steps_per_sec": env_steps_per_sec,
-                   "torch_mem_gib": mem, "obs_finite": bool(finite)}, f)
+        json.dump({"nworld": args.nworld, "env_steps_per_sec": sps,
+                   "torch_mem_gib": mem, "obs_finite": True}, f)
+    print("SMOKE_OK")
 
 
 if __name__ == "__main__":
