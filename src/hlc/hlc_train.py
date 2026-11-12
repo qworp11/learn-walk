@@ -8,6 +8,12 @@
 """
 import sys
 
+import torch
+
+# Pascal (sm_61): cuDNN 9 не даёт движки для свёрток → нативный fallback.
+# Сеть — MLP, cuDNN не нужен.
+torch.backends.cudnn.enabled = False
+
 import warp as wp
 
 wp.config.enable_mathdx_solver = False

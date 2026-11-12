@@ -15,6 +15,9 @@ import time
 import numpy as np
 import torch
 
+# Pascal: cuDNN 9 без движков для sm_61 → нативный fallback (сеть MLP)
+torch.backends.cudnn.enabled = False
+
 
 def main():
     ap = argparse.ArgumentParser()
