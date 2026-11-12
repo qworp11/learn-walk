@@ -1,0 +1,85 @@
+{
+  "_doc": "Этапы обучения. motion = имя CSV/npz из data/motions. nworld подбирается по VRAM.",
+
+  "s1_balance": {
+    "motion": "dance1_subject1",
+    "nworld": 1024,
+    "max_iterations": 2000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0,
+    "note": "S1: стояние/баланс. Референс dance1_subject1 (медленные качания, статика) + pushes от PushRobotResetter."
+  },
+
+  "s2_walk": {
+    "motion": "walk3_subject1",
+    "nworld": 1024,
+    "max_iterations": 5000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0
+  },
+
+  "s2_walk_run_a": {
+    "motion": "walk1_subject1",
+    "nworld": 1024,
+    "max_iterations": 5000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 1
+  },
+
+  "s3_run": {
+    "motion": "run2_subject1",
+    "nworld": 1024,
+    "max_iterations": 6000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0
+  },
+
+  "s3_sprint": {
+    "motion": "sprint1_subject2",
+    "nworld": 1024,
+    "max_iterations": 6000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0
+  },
+
+  "s4_jump": {
+    "motion": "jumps1_subject1",
+    "nworld": 1024,
+    "max_iterations": 6000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0
+  },
+
+  "s6_fall": {
+    "motion": "fallAndGetUp1_subject1",
+    "nworld": 1024,
+    "max_iterations": 6000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0
+  },
+
+  "s6_fall2": {
+    "motion": "fallAndGetUp2_subject2",
+    "nworld": 1024,
+    "max_iterations": 6000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0
+  },
+
+  "s8_dance": {
+    "motion": "dance2_subject1",
+    "nworld": 1024,
+    "max_iterations": 8000,
+    "overrides": {},
+    "env_overrides": {},
+    "seed": 0
+  }
+}
