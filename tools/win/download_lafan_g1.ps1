@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Force $dir | Out-Null
 foreach ($f in $files) {
   $out = Join-Path $dir $f
   if (Test-Path $out) { Write-Host "SKIP $f"; continue }
-  curl.exe -sL --retry 3 -o $out "$base/$f?download=true"
+  curl.exe -sL --retry 3 -o $out "$base/$f"
   if ($LASTEXITCODE -eq 0) { Write-Host "OK $f" } else { Write-Host "FAIL $f" }
 }
 Write-Host "ALL_DONE"

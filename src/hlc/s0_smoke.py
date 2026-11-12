@@ -25,6 +25,11 @@ def main():
 
     import warp as wp
 
+    # Pascal fix: libmathdx (cuSolverDx/cuBLASDx) не поддерживает sm_61
+    wp.config.enable_mathdx_solver = False
+    wp.config.enable_mathdx_gemm = False
+    wp.config.kernel_cache_dir = "/root/wp_kernel_cache"
+
     # Тест warp-ядра на Pascal
     @wp.kernel
     def dbl(a: wp.array[float], b: wp.array[float]):

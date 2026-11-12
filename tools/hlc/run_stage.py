@@ -62,7 +62,7 @@ def main():
             resume = str(pts[-1])
 
     cmd = [
-        "python", "-m", "mujoco_playground.rl.rsl_rl.train",
+        "python", str(PROJ / "src" / "hlc" / "hlc_train.py"),
         "--env", c.get("env", "G1WholeBodyTracking"),
         "--seed", str(c.get("seed", 0)),
         "--logdir", str(run_dir),
