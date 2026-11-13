@@ -1,0 +1,26 @@
+{
+  "stage": "s1_balance",
+  "cmd": [
+    "python",
+    "/mnt/g/LEARN WALK/src/hlc/hlc_train.py",
+    "--env",
+    "G1WholeBodyTracking",
+    "--seed",
+    "0",
+    "--logdir",
+    "/root/hlc-logs/s1_balance/run_1",
+    "--env_overrides",
+    "{\"trajectory_path\": \"/mnt/g/LEARN WALK/data/motions/npz_g1/dance1_subject1.npz\"}",
+    "--overrides",
+    "{\"nworld\": 1024, \"max_iterations\": 2000}",
+    "--wp_kernel_cache_dir",
+    "/root/wp_kernel_cache"
+  ],
+  "overrides": {
+    "nworld": 1024,
+    "max_iterations": 2000
+  },
+  "env_overrides": {
+    "trajectory_path": "/mnt/g/LEARN WALK/data/motions/npz_g1/dance1_subject1.npz"
+  }
+}

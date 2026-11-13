@@ -19,6 +19,8 @@ import numpy as np
 
 os.environ.setdefault("MUJOCO_GL", "egl")  # fallback на osmesa ниже
 
+import mujoco  # noqa: E402 — после установки MUJOCO_GL
+
 
 def build_scene():
     from mujoco_playground.robots.g1.sim import scene as g1_scene
@@ -37,6 +39,8 @@ def main():
     ap.add_argument("--qpos", type=str, default=None, help="npy [T, nq]")
     ap.add_argument("--npz", type=str, default=None, help="референс npz")
     ap.add_argument("--ghost_npz", type=str, default=None)
+    ap.add_argument("--compare_npz", type=str, default=None,
+                    help="двухпанельное видео: слева --qpos, справа референс")
     ap.add_argument("--out", type=str, required=True)
     ap.add_argument("--fps", type=float, default=50.0)
     ap.add_argument("--width", type=int, default=1280)
@@ -80,29 +84,65 @@ def main():
                                       "torso_link")
     cam = mujoco.MjvCamera()  # свободная камера, следит за тазом
 
+    # двухпанельный режим: слева политика (--qpos), справа референс
+    if args.compare_npz:
+        gj, gp, gq = qpos_from_npz(args.compare_npz)
+        ref = np.concatenate([gp, gq, gj], axis=1)[: qpos.shape[0]]
+        data_b = mujoco.MjData(model)
+        cam_b = mujoco.MjvCamera()
+        try:
+            renderer_b = Renderer(model, height=args.height,
+                                  width=args.width)
+        except Exception as e:
+            print(f"EGL failed ({e}); fallback OSMesa", file=sys.stderr)
+            os.environ["MUJOCO_GL"] = "osmesa"
+            renderer_b = Renderer(model, height=args.height,
+                                  width=args.width)
+        with imageio.get_writer(args.out, fps=int(args.fps),
+                                codec="libx264", quality=8) as w:
+            T = qpos.shape[0]
+            for t in range(T):
+                fa = render_frame(model, data, cam, renderer, pelvis_id,
+                                  qpos[t], t, args, is_second=False,
+                                  cam_b=None, renderer_b=None, data_b=None)
+                fb = render_frame(model, data_b, cam_b, renderer_b, pelvis_id,
+                                  ref[t], t, args, is_second=True,
+                                  cam_b=cam_b, renderer_b=renderer_b,
+                                  data_b=data_b)
+                divider = np.full((fa.shape[0], 4, 3), 40, dtype=np.uint8)
+                w.append_data(np.concatenate([fa, divider, fb], axis=1))
+                if t % 250 == 0:
+                    print(f"frame {t}/{T}")
+        print("VIDEO_OK", args.out)
+        return 0
+
     with imageio.get_writer(args.out, fps=int(args.fps), codec="libx264",
                             quality=8) as w:
         T = qpos.shape[0]
         for t in range(T):
-            data.qpos[:] = qpos[t]
-            mujoco.mj_forward(model, data)
-            # камера следит за тазом
-            cam_pos = data.xpos[pelvis_id]
-            cam.lookat[:] = [cam_pos[0], cam_pos[1], cam_pos[2] + 0.2]
-            cam.distance = 3.0
-            cam.elevation = -10
-            if t % int(args.fps) == 0:  # медленный облёт камеры
-                cam.azimuth = -90 + ((t // int(args.fps)) * 5) % 360
-            if ghost is not None and t < ghost.shape[0]:
-                # призрак референса: копируем позы референса в отдельный mjsim
-                pass  # ghost упрощён: пропускаем, есть отдельный режим
-            renderer.update_scene(data, camera=cam)
-            frames.append(renderer.render())
-            w.append_data(frames[-1])
+            img = render_frame(model, data, cam, renderer, pelvis_id, qpos[t],
+                               t, args, is_second=False, cam_b=None,
+                               renderer_b=None, data_b=None)
+            w.append_data(img)
             if t % 500 == 0:
                 print(f"frame {t}/{T}")
 
     print("VIDEO_OK", args.out)
+
+
+def render_frame(model, data, cam, renderer, pelvis_id, qpos_t, t, args,
+                 is_second=False, cam_b=None, renderer_b=None, data_b=None):
+    """Рендер одного кадра: qpos → mj_forward → камера за тазом → картинка."""
+    data.qpos[:] = qpos_t
+    mujoco.mj_forward(model, data)
+    cam_pos = data.xpos[pelvis_id]
+    cam.lookat[:] = [cam_pos[0], cam_pos[1], cam_pos[2] + 0.2]
+    cam.distance = 3.0
+    cam.elevation = -10
+    if t % int(args.fps) == 0:  # медленный облёт камеры (одинаков у панелей)
+        cam.azimuth = -90 + ((t // int(args.fps)) * 5) % 360
+    renderer.update_scene(data, camera=cam)
+    return renderer.render()
 
 
 if __name__ == "__main__":
