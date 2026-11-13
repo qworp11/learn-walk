@@ -1,0 +1,2 @@
+=== ОРКЕСТРАТОР старт 2026-11-13T06:17:30Z ===
+этапы: s1_balance s2_walk s2_walk_run_a s3_run s3_sprint s4_jump s6_fall s6_fall2 s8_dance

@@ -31,6 +31,15 @@ PYEOF
     echo "$STAGE: нет в stages.json — СКИП" >> "$REPORT"; continue
   fi
 
+  # этап уже завершён ранее? — только финальное видео
+  if ls /root/hlc-logs/"$STAGE"/run_*/TRAIN_DONE >/dev/null 2>&1; then
+    echo "$STAGE: TRAIN_DONE уже есть — только финальное видео" >> "$REPORT"
+    bash "$PROJ/tools/wsl/final_video.sh" "$STAGE" "$MOTION" \
+      > "/root/final_video_$STAGE.out" 2>&1
+    echo "$STAGE: финальное видео готово" >> "$REPORT"
+    continue
+  fi
+
   # пускаем watchdog (рестарт при краше/зависании) и превью-воркер
   nohup bash "$PROJ/tools/wsl/watchdog.sh" "$STAGE" 5 \
     > "/root/watchdog_$STAGE.out" 2>&1 &
