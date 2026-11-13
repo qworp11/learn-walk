@@ -69,6 +69,11 @@ json.dump(hb, open(path, "w"), indent=2)
 PYEOF
 
   if [ "$alive" != "true" ]; then
+    # Штатное завершение (все итерации прошли) — не рестартуем
+    if ls "$LOGROOT"/run_*/TRAIN_DONE >/dev/null 2>&1; then
+      echo "$now: тренировка завершилась штатно (TRAIN_DONE) — watchdog стоп." | tee -a "$LOGROOT/watchdog.log"
+      break
+    fi
     if [ "$restarts" -ge "$MAX_RESTARTS" ]; then
       echo "$now: ПЕРЕСТАНОВКИ ИЗЛОЖИЛИСЬ ($restarts) — стоп. Виталик, требуется ручной разбор." | tee -a "$LOGROOT/watchdog.log"
       break

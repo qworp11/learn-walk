@@ -18,3 +18,9 @@ grep -oE 'Time elapsed: [0-9:]+' "$L" | tail -1
 grep -oE 'ETA: [0-9:]+' "$L" | tail -1
 echo === nan count ===
 grep -cE 'NaN|nan' "$L" || true
+echo === reward trend ===
+grep -oE 'Mean reward: [-0-9.e]+' "$L" | cut -d' ' -f3 | awk 'NR%25==1' | tr '\n' ' '
+echo
+echo === ep len trend ===
+grep -oE 'Mean episode length: [0-9]+' "$L" | cut -d' ' -f4 | awk 'NR%25==1' | tr '\n' ' '
+echo

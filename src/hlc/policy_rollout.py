@@ -33,6 +33,8 @@ def main():
     ap.add_argument("--episodes", type=int, default=3)
     ap.add_argument("--nworld", type=int, default=1)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--play", action="store_true",
+                    help="play-режим: старт с кадра 0, без пушей/шума")
     args = ap.parse_args()
 
     from mujoco_playground._src.rl import env_registry
@@ -45,8 +47,11 @@ def main():
     agent_cfg = entry.runner_cfg
     agent_cfg.nworld = args.nworld
 
+    env_overrides = {"trajectory_path": npz}
+    if args.play:
+        env_overrides["play"] = True
     env = entry.env_builder(nworld=args.nworld, device=args.device,
-                            trajectory_path=npz)
+                            **env_overrides)
     venv = vecenv_wrapper.RslRlVecEnvWrapper(
         env, clip_actions=agent_cfg.clip_actions,
         cfg=entry.runner_cfg.vecenv_wrapper_cfg)

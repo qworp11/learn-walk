@@ -84,6 +84,8 @@ def main():
         "env_overrides": env_overrides}, indent=2))
     with (run_dir / "train_stdout.log").open("w") as logf:
         rc = subprocess.call(cmd, stdout=logf, stderr=subprocess.STDOUT)
+    if rc == 0:
+        (run_dir / "TRAIN_DONE").touch()  # маркер штатного завершения
     return rc
 
 
