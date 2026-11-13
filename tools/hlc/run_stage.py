@@ -50,16 +50,22 @@ def main():
     }
     env_overrides = {"trajectory_path": npz, **c.get("env_overrides", {})}
 
-    run_dir = LOGROOT / stage / f"run_{next_run(LOGROOT / stage)}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-
-    # auto-resume: последний чекпоинт в run-директории
+    # auto-resume: продолжаем ПОСЛЕДНИЙ запуск этапа, если в нём есть чекпоинты
+    # (иначе watchdog после падения начал бы обучение с нуля)
+    stage_dir = LOGROOT / stage
     resume = None
-    if (run_dir / ".keep_training").exists() or c.get("auto_resume"):
-        pts = sorted(run_dir.glob("model_*.pt"),
+    runs = sorted(stage_dir.glob("run_*"), key=lambda p: p.name) if stage_dir.exists() else []
+    for cand in reversed(runs):
+        pts = sorted(cand.glob("model_*.pt"),
                      key=lambda p: int(p.stem.split("_")[1]) if p.stem[6:].isdigit() else -1)
         if pts:
+            run_dir = cand
             resume = str(pts[-1])
+            print(f"RESUME: {run_dir.name} <- {resume}", flush=True)
+            break
+    if resume is None:
+        run_dir = stage_dir / f"run_{next_run(stage_dir)}"
+        run_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
         "python", str(PROJ / "src" / "hlc" / "hlc_train.py"),

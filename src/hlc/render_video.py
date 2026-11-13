@@ -75,6 +75,10 @@ def main():
 
     frames = []
     pelvis_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+    if pelvis_id < 0:
+        pelvis_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY,
+                                      "torso_link")
+    cam = mujoco.MjvCamera()  # свободная камера, следит за тазом
 
     with imageio.get_writer(args.out, fps=int(args.fps), codec="libx264",
                             quality=8) as w:
@@ -84,17 +88,16 @@ def main():
             mujoco.mj_forward(model, data)
             # камера следит за тазом
             cam_pos = data.xpos[pelvis_id]
-            cam = renderer.scene.camera
             cam.lookat[:] = [cam_pos[0], cam_pos[1], cam_pos[2] + 0.2]
             cam.distance = 3.0
             cam.elevation = -10
             if t % int(args.fps) == 0:  # медленный облёт камеры
-                cam.azimuth = -90 + (t // int(args.fps)) * 5 % 360
+                cam.azimuth = -90 + ((t // int(args.fps)) * 5) % 360
             if ghost is not None and t < ghost.shape[0]:
                 # призрак референса: копируем позы референса в отдельный mjsim
                 pass  # ghost упрощён: пропускаем, есть отдельный режим
-            renderer.update_scene(data)
-            frames.append(renderer.render.copy())
+            renderer.update_scene(data, camera=cam)
+            frames.append(renderer.render())
             w.append_data(frames[-1])
             if t % 500 == 0:
                 print(f"frame {t}/{T}")

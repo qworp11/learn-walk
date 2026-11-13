@@ -24,6 +24,8 @@ def main():
     ap.add_argument("--nworld", type=int, default=256)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--steps", type=int, default=500)
+    ap.add_argument("--motion", default=None,
+                    help="NPZ-референс (trajectory_path override)")
     args = ap.parse_args()
 
     import warp as wp
@@ -50,8 +52,13 @@ def main():
 
     entry = env_registry.get("G1WholeBodyTracking")
     print("== building env, nworld =", args.nworld, "device =", args.device)
+    env_overrides = {}
+    if args.motion:
+        env_overrides["trajectory_path"] = args.motion
+        print("trajectory:", args.motion)
     t0 = time.time()
-    env = entry.env_builder(nworld=args.nworld, device=args.device)
+    env = entry.env_builder(nworld=args.nworld, device=args.device,
+                            **env_overrides)
     print(f"build ok in {time.time()-t0:.1f}s")
 
     venv = vecenv_wrapper.RslRlVecEnvWrapper(env, cfg=None)
@@ -81,7 +88,8 @@ def main():
 
     with open("/root/s0_smoke_result.json", "w") as f:
         json.dump({"nworld": args.nworld, "env_steps_per_sec": sps,
-                   "torch_mem_gib": mem, "obs_finite": True}, f)
+                   "torch_mem_gib": mem, "obs_finite": True,
+                   "motion": args.motion}, f)
     print("SMOKE_OK")
 
 

@@ -26,6 +26,10 @@ while true; do
   IFS=', ' read -r temp vram util power <<< "$gpu"
 
   pid=$(pgrep -f "$PGREP_PAT" | head -1)
+  # pgrep матчит и зомби — проверяем, что процесс реально работает
+  if [ -n "$pid" ] && [ "$(awk '{print $3}' "/proc/$pid/stat" 2>/dev/null)" == "Z" ]; then
+    pid=""
+  fi
   alive="false"
   [ -n "$pid" ] && alive="true"
 
