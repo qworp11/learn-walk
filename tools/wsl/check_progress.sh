@@ -8,19 +8,19 @@ else
   L=$(ls -t "$LOGROOT"/run_*/train_stdout.log 2>/dev/null | head -1)
 fi
 echo "log: $L"
-grep -oE 'Total reward: [-0-9.e]+' "$L" | tail -5
+grep -aoE 'Total reward: [-0-9.e]+' "$L" | tail -5
 echo === anchor error ===
-grep -oE 'error_anchor_pos: [0-9.e]+' "$L" | tail -3
-grep -oE 'error_anchor_rot: [0-9.e]+' "$L" | tail -3
+grep -aoE 'error_anchor_pos: [0-9.e]+' "$L" | tail -3
+grep -aoE 'error_anchor_rot: [0-9.e]+' "$L" | tail -3
 echo === timing ===
-grep -oE 'Iteration time: [0-9.]+' "$L" | tail -2
-grep -oE 'Time elapsed: [0-9:]+' "$L" | tail -1
-grep -oE 'ETA: [0-9:]+' "$L" | tail -1
+grep -aoE 'Iteration time: [0-9.]+' "$L" | tail -2
+grep -aoE 'Time elapsed: [0-9:]+' "$L" | tail -1
+grep -aoE 'ETA: [0-9:]+' "$L" | tail -1
 echo === nan count ===
-grep -cE 'NaN|nan' "$L" || true
+grep -acE 'NaN|nan' "$L" || true
 echo === reward trend ===
-grep -oE 'Mean reward: [-0-9.e]+' "$L" | cut -d' ' -f3 | awk 'NR%25==1' | tr '\n' ' '
+grep -aoE 'Mean reward: [-0-9.e]+' "$L" | cut -d' ' -f3 | awk 'NR%25==1' | tr '\n' ' '
 echo
 echo === ep len trend ===
-grep -oE 'Mean episode length: [0-9]+' "$L" | cut -d' ' -f4 | awk 'NR%25==1' | tr '\n' ' '
+grep -aoE 'Mean episode length: [0-9]+' "$L" | cut -d' ' -f4 | awk 'NR%25==1' | tr '\n' ' '
 echo

@@ -1,11 +1,11 @@
 #!/bin/bash
-# Watchdog: следит за тренировкой, рестартит при падении, пишет heartbeat.json.
+# Watchdog v2: следит за тренировкой этапа.
+# Прогресс = число строк "Iteration time" в логе (формат rsl_rl может меняться,
+# счётчик строк растёт монотонно — надёжнее регэкспов по номеру итерации).
+# - процесс умер и TRAIN_DONE нет → рестарт с последнего чекпоинта (backoff)
+# - прогресс не двигается 30+ мин → kill hlc_train + run_stage → рестарт
+# - TRAIN_DONE → штатный выход
 # Запуск: bash watchdog.sh <stage> [max_restarts]
-# Каждые 10 минут:
-#  - жив ли процесс train (pgrep по run_stage.py <stage>)
-#  - темп./VRAM GPU
-#  - последние метрики из train_stdout.log (reward/KL/entropy/NaN)
-#  - если умер: resume с последнего чекпоинта, экспоненциальный backoff, максимум 5 попыток
 set -u
 source /root/hlc-venv/bin/activate
 STAGE="$1"; shift || true
@@ -17,8 +17,27 @@ PGREP_PAT="run_stage.py $STAGE"
 
 restarts=0
 backoff=300
-last_iter=-1
-same_iter_count=0
+last_count=-1
+same_count=0
+
+# убить тренировку целиком: hlc_train + его run_stage (pkill -f в этой WSL
+# ненадёжен — работаем по явным PID)
+kill_train() {
+  for p in $(pgrep -f "hlc_train.py" 2>/dev/null); do kill -9 "$p" 2>/dev/null; done
+  for p in $(pgrep -f "run_stage.py $STAGE" 2>/dev/null); do kill -9 "$p" 2>/dev/null; done
+  return 0
+}
+
+progress_count() {
+  # самый свежий лог этапа; бинарный вывод grep не пугает (-a)
+  local L
+  L=$(ls -t "$LOGROOT"/run_*/train_stdout.log 2>/dev/null | head -1)
+  if [ -n "$L" ]; then
+    grep -ac "Iteration time" "$L" 2>/dev/null || echo 0
+  else
+    echo 0
+  fi
+}
 
 while true; do
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -33,23 +52,19 @@ while true; do
   alive="false"
   [ -n "$pid" ] && alive="true"
 
-  # Последний лог тренировки
   run_dir=$(ls -dt "$LOGROOT"/run_* 2>/dev/null | head -1)
-  iter=""; reward=""; nan="no"; kl=""; entropy=""
-  if [ -n "$run_dir" ]; then
-    lastline=$(tail -c 200000 "$run_dir/train_stdout.log" 2>/dev/null | grep -E "^(  iteration|iteration)" | tail -1)
-    # rsl_rl печатает разные форматы — парсим по-простому
-    iter=$(tail -c 200000 "$run_dir/train_stdout.log" 2>/dev/null | grep -oE "Iteration [0-9]+" | tail -1 | grep -oE "[0-9]+")
-    [ -z "$iter" ] && iter=$(tail -c 200000 "$run_dir/train_stdout.log" 2>/dev/null | grep -oE "iteration:[0-9]+" | tail -1 | cut -d: -f2)
-    if grep -qE "nan|NaN|inf" <(tail -c 100000 "$run_dir/train_stdout.log" 2>/dev/null); then nan="maybe"; fi
+  iter=$(progress_count)
+  nan="no"
+  if [ -n "$run_dir" ] && [ -n "$(ls -t "$run_dir"/train_stdout.log 2>/dev/null | head -1)" ]; then
+    if grep -aqE "nan|NaN" <(tail -c 100000 "$run_dir"/train_stdout.log 2>/dev/null); then nan="maybe"; fi
   fi
 
-  # Зависание: итерация не меняется 30+ минут
-  if [ "$iter" == "$last_iter" ] && [ "$alive" == "true" ]; then
-    same_iter_count=$((same_iter_count+1))
+  # Зависание: счётчик итераций не растёт 3 проверки подряд (30+ мин)
+  if [ "$iter" == "$last_count" ] && [ "$alive" == "true" ]; then
+    same_count=$((same_count+1))
   else
-    same_iter_count=0
-    last_iter="$iter"
+    same_count=0
+    last_count="$iter"
   fi
 
   python - "$HB" "$now" "$STAGE" "$alive" "$pid" "$temp" "$vram" "$util" "$power" "$run_dir" "$iter" "$nan" "$restarts" <<'PYEOF'
@@ -62,14 +77,13 @@ except Exception:
 hb.update({
   "time": now, "stage": stage, "train_alive": alive == "true", "pid": pid,
   "gpu": {"temp_c": temp, "vram_mb": vram, "util": util, "power_w": power},
-  "last_iteration": it, "nan_suspect": nan, "restarts": restarts,
+  "iteration_count": it, "nan_suspect": nan, "restarts": restarts,
   "run_dir": run_dir,
 })
 json.dump(hb, open(path, "w"), indent=2)
 PYEOF
 
   if [ "$alive" != "true" ]; then
-    # Штатное завершение (все итерации прошли) — не рестартуем
     if ls "$LOGROOT"/run_*/TRAIN_DONE >/dev/null 2>&1; then
       echo "$now: тренировка завершилась штатно (TRAIN_DONE) — watchdog стоп." | tee -a "$LOGROOT/watchdog.log"
       break
@@ -82,14 +96,12 @@ PYEOF
     echo "$now: train мёртв, рестарт #$restarts (backoff ${backoff}s)" | tee -a "$LOGROOT/watchdog.log"
     sleep "$backoff"
     backoff=$((backoff*2))
-    touch "$LOGROOT"/run_*/.keep_training 2>/dev/null
     bash "$PROJ/tools/wsl/train.sh" "$STAGE" || true
-  elif [ "$same_iter_count" -ge 3 ]; then
-    echo "$now: итерация $iter не двигается 30+ мин — kill + resume" | tee -a "$LOGROOT/watchdog.log"
-    kill -9 "$pid" 2>/dev/null
-    same_iter_count=0
+  elif [ "$same_count" -ge 3 ]; then
+    echo "$now: прогресс ($iter итераций) не двигается 30+ мин — kill + resume" | tee -a "$LOGROOT/watchdog.log"
+    kill_train
+    same_count=0
     sleep 30
-    touch "$LOGROOT"/run_*/.keep_training 2>/dev/null
     bash "$PROJ/tools/wsl/train.sh" "$STAGE" || true
   fi
 

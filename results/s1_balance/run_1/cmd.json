@@ -14,7 +14,9 @@
     "--overrides",
     "{\"nworld\": 1024, \"max_iterations\": 2000}",
     "--wp_kernel_cache_dir",
-    "/root/wp_kernel_cache"
+    "/root/wp_kernel_cache",
+    "--resume_path",
+    "/root/hlc-logs/s1_balance/run_1/model_1500.pt"
   ],
   "overrides": {
     "nworld": 1024,
