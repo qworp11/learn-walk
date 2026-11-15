@@ -4,6 +4,7 @@
 # → следующий этап. Проваленный этап (5 рестартов) помечает FAILED и идёт дальше.
 # Usage: stage_orchestrator.sh <stage1> <stage2> ...
 set -u
+source /root/hlc-venv/bin/activate
 PROJ="/mnt/g/LEARN WALK"
 REPORT="$PROJ/results/orchestrator_report.txt"
 MAX_WAIT_MINS=600  # предохранитель на этап (10 ч)
@@ -21,12 +22,7 @@ for STAGE in "$@"; do
   echo "[$(date -u +%H:%M)] --- этап $STAGE ---" >> "$REPORT"
 
   # конфиг этапа
-  MOTION=$(python - "$STAGE" <<'PYEOF'
-import json, sys
-cfg = json.load(open("/mnt/g/LEARN WALK/configs/stages.json"))
-print(cfg.get(sys.argv[1], {}).get("motion", ""))
-PYEOF
-)
+  MOTION=$(python "/mnt/g/LEARN WALK/tools/hlc/stage_motion.py" "$STAGE")
   if [ -z "$MOTION" ]; then
     echo "$STAGE: нет в stages.json — СКИП" >> "$REPORT"; continue
   fi

@@ -1,2 +1,9 @@
-=== ОРКЕСТРАТОР старт 2026-11-13T06:17:30Z ===
+=== ОРКЕСТРАТОР старт 2026-11-13T15:36:32Z ===
 этапы: s1_balance s2_walk s2_walk_run_a s3_run s3_sprint s4_jump s6_fall s6_fall2 s8_dance
+[15:36] --- этап s1_balance ---
+s1_balance: TRAIN_DONE уже есть — только финальное видео
+s1_balance: финальное видео готово
+[15:37] --- этап s2_walk ---
+=== ОРКЕСТРАТОР старт 2026-11-15T15:17:09Z ===
+этапы: s2_walk s2_walk_run_a s3_run s3_sprint s4_jump s6_fall s6_fall2 s8_dance
+[15:17] --- этап s2_walk ---
