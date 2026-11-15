@@ -1,17 +1,17 @@
 {
-  "time": "2026-11-15T18:17:42Z",
-  "stage": "s2_walk",
+  "time": "2026-11-15T18:26:36Z",
+  "stage": "s2_walk_run_a",
   "train_alive": false,
   "pid": "",
   "gpu": {
     "temp_c": "58",
-    "vram_mb": "2511",
-    "util": "1",
-    "power_w": "66.95"
+    "vram_mb": "4062",
+    "util": "6",
+    "power_w": "68.15"
   },
   "last_iteration": "",
   "nan_suspect": "no",
-  "restarts": "0",
-  "run_dir": "/root/hlc-logs/s2_walk/run_0",
-  "iteration_count": "5000"
+  "restarts": "1",
+  "run_dir": "/root/hlc-logs/s2_walk_run_a/run_0",
+  "iteration_count": "1498"
 }

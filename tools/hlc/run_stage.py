@@ -11,6 +11,7 @@
 Отдельные скиллы = отдельные запуски с разными trajectory_path.
 """
 import json
+import os
 import pathlib
 import subprocess
 import sys
