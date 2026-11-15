@@ -10,3 +10,6 @@ s1_balance: финальное видео готово
 s2_walk: TRAIN_DONE ✓
 s2_walk: финальное видео готово
 [17:31] --- этап s2_walk_run_a ---
+s2_walk_run_a: TRAIN_DONE ✓
+s2_walk_run_a: финальное видео готово
+[21:11] --- этап s3_run ---

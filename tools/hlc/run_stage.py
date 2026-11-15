@@ -80,7 +80,9 @@ def main():
                         warm_start = True
                         print(f"WARM-START: {init['stage']}/{cand.name} <- {resume}", flush=True)
                         break
-    if resume is None:
+    if warm_start or resume is None:
+        # warm-start и чистый старт пишут в НОВЫЙ run_dir:
+        # у warm-start этапа своих чекпоинтов ещё нет и run_dir не определён
         run_dir = stage_dir / f"run_{next_run(stage_dir)}"
         run_dir.mkdir(parents=True, exist_ok=True)
 

@@ -1,10 +1,10 @@
 """Живой стрим обучения: MJPEG http://localhost:8081/stream
 
 Отдельный процесс. Крутит непрерывный роллаут свежайшего чекпоинта
-(физика warp на CPU — тренировку на GPU не трогает; рендер EGL 480x270).
-Между эпизодами проверяет новые чекпоинты и горячо подменяет политику:
-робот в окне улучшается на глазах. Внизу кадра — плашка с этапом,
-номером чекпоинта и текущей наградой.
+(физика warp на CPU — тренировку на GPU не трогает; рендер EGL 640x360,
+JPEG-кодирование в отдельном потоке). Между эпизодами проверяет новые
+чекпоинты и горячо подменяет политику: робот в окне улучшается на глазах.
+Внизу кадра — плашка с этапом, номером чекпоинта и текущей наградой.
 
 Рецепт env/политики — 1:1 как в policy_rollout.py (он проверен демо-съёмкой).
 """
@@ -35,8 +35,9 @@ import mujoco  # noqa: E402
 from mujoco import Renderer  # noqa: E402
 
 LOGROOT = "/root/hlc-logs"
-W, H = 640, 360
-JPEGQ = 80
+W, H = 640, 360          # итоговый кадр для зрителя
+RENDER_W, RENDER_H = 512, 288  # рендерим меньше (быстрее), энкодер растягивает
+JPEGQ = 60  # ниже = быстрее кодирование = больше fps (визуально почти не отличимо)
 MAX_EP_STEPS = 600  # страховка (max_ep_len=500 + запас)
 
 # человеческие названия этапов для зрителей стрима
@@ -160,6 +161,8 @@ def encode_frame(img, caption):
     if FONT is None:
         FONT = _font_at(20)
     im = Image.fromarray(np.asarray(img))
+    if im.size != (W, H):
+        im = im.resize((W, H), Image.BILINEAR)
     d = ImageDraw.Draw(im)
     wpx = im.width
     d.rectangle([0, im.height - 32, wpx, im.height], fill=(0, 0, 0))
@@ -175,6 +178,37 @@ def encode_frame(img, caption):
     return b.getvalue()
 
 
+# --- энкодер-поток: JPEG+плашка уходят из горячего цикла физики ---
+# рендер/кодирование в основном происходят на C-стороне (PIL/EGL) и
+# отпускают GIL — поэтому перекрываются с шагом физики, fps растёт почти вдвое
+_ENC_CV = threading.Condition()
+_ENC = {"pending": None}
+
+
+def submit_frame(img, caption):
+    """Отправить кадр на кодирование (кодируется только самый свежий)."""
+    with _ENC_CV:
+        _ENC["pending"] = (img, caption)
+        _ENC_CV.notify()
+
+
+def encoder_loop():
+    while True:
+        with _ENC_CV:
+            while _ENC["pending"] is None:
+                _ENC_CV.wait()
+            img, cap = _ENC["pending"]
+            _ENC["pending"] = None
+        try:
+            jpg = encode_frame(img, cap)
+        except Exception:
+            traceback.print_exc()
+            time.sleep(0.5)
+            continue
+        with _state["lock"]:
+            _state["jpg"] = jpg
+
+
 def rollout_loop():
     global FONT
     model = build_scene()
@@ -187,11 +221,11 @@ def rollout_loop():
     print("HDBG H=", repr(H), type(H).__name__, "W=", repr(W), type(W).__name__,
           flush=True)
     try:
-        renderer = Renderer(model, height=H, width=W)
+        renderer = Renderer(model, height=RENDER_H, width=RENDER_W)
     except Exception as e:
         print("EGL failed:", e, "→ osmesa", flush=True)
         os.environ["MUJOCO_GL"] = "osmesa"
-        renderer = Renderer(model, height=H, width=W)
+        renderer = Renderer(model, height=RENDER_H, width=RENDER_W)
 
     from mujoco_playground._src.rl import env_registry
     from mujoco_playground._src.rl.rsl_rl import checkpoint
@@ -208,9 +242,8 @@ def rollout_loop():
         try:
             ckpt, run_dir = latest_checkpoint()
             if ckpt is None:
-                with _state["lock"]:
-                    _state["jpg"] = encode_frame(
-                        np.zeros((H, W, 3), np.uint8), "нет чекпоинтов — жду…")
+                submit_frame(
+                    np.zeros((H, W, 3), np.uint8), "нет чекпоинтов — жду…")
                 time.sleep(10)
                 continue
 
@@ -225,10 +258,9 @@ def rollout_loop():
                     motion = cmd.get("env_overrides", {}).get("trajectory_path", "")
                 except Exception:
                     pass
-                with _state["lock"]:
-                    _state["jpg"] = encode_frame(
-                        np.zeros((H, W, 3), np.uint8),
-                        f"пересборка env: {STAGE_RU.get(stage, stage)}…")
+                submit_frame(
+                    np.zeros((H, W, 3), np.uint8),
+                    f"пересборка env: {STAGE_RU.get(stage, stage)}…")
                 if venv is not None:
                     try:
                         venv.close()
@@ -281,6 +313,7 @@ def rollout_loop():
             # эпизод
             obs_td, _ = venv.reset()
             ep_rew, ep_steps = 0.0, 0
+            _t_step_sum = _t_render_sum = _t_other = 0.0
             trn = {}
             t0 = time.time()
             while True:
@@ -292,7 +325,9 @@ def rollout_loop():
                         break
                 with torch.no_grad():
                     action = policy(obs_td)
+                _t0 = time.time()
                 obs_td, rew, done, extras = venv.step(action)
+                _t_step = time.time() - _t0
                 ep_rew += float(rew.mean().item())
                 ep_steps += 1
 
@@ -305,8 +340,13 @@ def rollout_loop():
                 cam.distance = 3.0
                 cam.elevation = -10
                 cam.azimuth = -90 + ((ep_steps // 50) * 4) % 360
+                _t0 = time.time()
                 renderer.update_scene(data, camera=cam)
                 img = renderer.render()
+                _t_render = time.time() - _t0
+                _t_other += (time.time() - step_t) - _t_step - _t_render
+                _t_step_sum += _t_step
+                _t_render_sum += _t_render
 
                 if ep_steps % 25 == 0:
                     trn = train_stats(run_dir) or {}
@@ -318,8 +358,8 @@ def rollout_loop():
                     parts.append(f"награда {trn['rew']:.1f}")
                 parts.append(f"шаг {ep_steps / 50:.1f}/10с")
                 cap = " · ".join(parts)
-                with _state["lock"]:
-                    _state["jpg"] = encode_frame(img, cap)
+                # .copy(): буфер рендера переиспользуется следующим кадром
+                submit_frame(img.copy(), cap)
 
                 # реальное время: 1 шаг = 20 мс (50 Гц)
                 dt = time.time() - step_t
@@ -328,7 +368,10 @@ def rollout_loop():
                 if done or ep_steps >= MAX_EP_STEPS:
                     break
             fps = ep_steps / max(time.time() - t0, 1e-6)
-            print(f"stream: эпизод завершён, {ep_steps} шагов, {fps:.0f} шаг/с",
+            n = max(ep_steps, 1)
+            print(f"stream: эпизод завершён, {ep_steps} шагов, {fps:.0f} шаг/с | "
+                  f"кадр: шаг {_t_step_sum/n*1000:.0f}мс рендер {_t_render_sum/n*1000:.0f}мс "
+                  f"прочее {_t_other/n*1000:.0f}мс",
                   flush=True)
             time.sleep(0.2)
         except Exception:
@@ -350,7 +393,7 @@ class Handler(BaseHTTPRequestHandler):
                     with _state["lock"]:
                         buf = _state["jpg"]
                     if buf is None or buf == last:
-                        time.sleep(0.05)
+                        time.sleep(0.015)
                         continue
                     last = buf
                     self.wfile.write(
@@ -368,6 +411,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    threading.Thread(target=encoder_loop, daemon=True).start()
     threading.Thread(target=rollout_loop, daemon=True).start()
     print("live stream: http://localhost:8081/stream", flush=True)
     ThreadingHTTPServer(("0.0.0.0", 8081), Handler).serve_forever()
