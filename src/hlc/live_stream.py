@@ -35,9 +35,54 @@ import mujoco  # noqa: E402
 from mujoco import Renderer  # noqa: E402
 
 LOGROOT = "/root/hlc-logs"
-W, H = 480, 270
+W, H = 640, 360
 JPEGQ = 80
 MAX_EP_STEPS = 600  # страховка (max_ep_len=500 + запас)
+
+# человеческие названия этапов для зрителей стрима
+STAGE_RU = {
+    "s1_balance": "СТОЯНИЕ",
+    "s2_walk": "ХОДЬБА",
+    "s2_walk_run_a": "БЫСТРАЯ ХОДЬБА",
+    "s3_run": "БЕГ",
+    "s3_sprint": "СПРИНТ",
+    "s4_jump": "ПРЫЖКИ",
+    "s6_fall": "ПАДЕНИЯ И ВСТАВАНИЯ 1",
+    "s6_fall2": "ПАДЕНИЯ И ВСТАВАНИЯ 2",
+    "s8_dance": "ТАНЕЦ",
+}
+
+_stats_cache = {"path": None, "mtime": 0, "stats": {}}
+
+
+def train_stats(run_dir):
+    """(итерация, всего, награда) из хвоста тренировочного лога — с кэшем mtime."""
+    log = os.path.join(run_dir, "train_stdout.log")
+    try:
+        m = os.path.getmtime(log)
+    except OSError:
+        return None
+    if _stats_cache["path"] == log and _stats_cache["mtime"] == m:
+        return _stats_cache["stats"]
+    try:
+        with open(log, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 8000))
+            txt = f.read().decode("utf-8", "ignore")
+    except OSError:
+        return None
+    import re
+
+    st = {}
+    it = re.findall(r"Learning iteration (\d+)/(\d+)", txt)
+    if it:
+        st["iter"], st["total"] = int(it[-1][0]), int(it[-1][1])
+    rew = re.findall(r"Mean reward: ([-0-9.e]+)", txt)
+    if rew:
+        st["rew"] = float(rew[-1])
+    _stats_cache.update(path=log, mtime=m, stats=st)
+    return st
 
 _state = {"jpg": None, "lock": threading.Lock()}
 
@@ -82,19 +127,26 @@ def enable_uniform_starts():
     return n
 
 
-def _font():
+_FONTS = {}
+
+
+def _font_at(size):
     from PIL import ImageFont
 
-    for path, size in [("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15),
-                       ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)]:
-        try:
-            return ImageFont.truetype(path, size)
-        except Exception:
-            pass
-    try:
-        return ImageFont.load_default(size=15)
-    except Exception:
-        return ImageFont.load_default()
+    if size not in _FONTS:
+        for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+            try:
+                _FONTS[size] = ImageFont.truetype(path, size)
+                break
+            except Exception:
+                continue
+        else:
+            try:
+                _FONTS[size] = ImageFont.load_default(size=size)
+            except Exception:
+                _FONTS[size] = ImageFont.load_default()
+    return _FONTS[size]
 
 
 FONT = None
@@ -106,12 +158,18 @@ def encode_frame(img, caption):
     from PIL import Image, ImageDraw
 
     if FONT is None:
-        FONT = _font()
+        FONT = _font_at(20)
     im = Image.fromarray(np.asarray(img))
     d = ImageDraw.Draw(im)
     wpx = im.width
-    d.rectangle([0, im.height - 26, wpx, im.height], fill=(0, 0, 0))
-    d.text((6, im.height - 23), caption, fill=(255, 255, 255), font=FONT)
+    d.rectangle([0, im.height - 32, wpx, im.height], fill=(0, 0, 0))
+    font = FONT
+    for size in (20, 18, 16, 14, 12):
+        cand = _font_at(size)
+        font = cand  # безотказно: каждый проход уменьшает шрифт
+        if d.textlength(caption, font=cand) <= wpx - 16:
+            break
+    d.text((8, im.height - 28), caption, fill=(255, 255, 255), font=font)
     b = io.BytesIO()
     im.save(b, "JPEG", quality=JPEGQ)
     return b.getvalue()
@@ -170,7 +228,7 @@ def rollout_loop():
                 with _state["lock"]:
                     _state["jpg"] = encode_frame(
                         np.zeros((H, W, 3), np.uint8),
-                        f"пересборка env: {stage}…")
+                        f"пересборка env: {STAGE_RU.get(stage, stage)}…")
                 if venv is not None:
                     try:
                         venv.close()
@@ -223,6 +281,7 @@ def rollout_loop():
             # эпизод
             obs_td, _ = venv.reset()
             ep_rew, ep_steps = 0.0, 0
+            trn = {}
             t0 = time.time()
             while True:
                 step_t = time.time()
@@ -249,9 +308,16 @@ def rollout_loop():
                 renderer.update_scene(data, camera=cam)
                 img = renderer.render()
 
-                cap = (f"LIVE {stage} · {os.path.basename(ckpt)} · "
-                       f"rew {ep_rew / max(ep_steps, 1):.2f} · "
-                       f"ep {ep_steps} шагов")
+                if ep_steps % 25 == 0:
+                    trn = train_stats(run_dir) or {}
+                name = STAGE_RU.get(stage, stage)
+                parts = [name]
+                if trn.get("iter") is not None:
+                    parts.append(f"{trn['iter']}/{trn['total']}")
+                if trn.get("rew") is not None:
+                    parts.append(f"награда {trn['rew']:.1f}")
+                parts.append(f"шаг {ep_steps / 50:.1f}/10с")
+                cap = " · ".join(parts)
                 with _state["lock"]:
                     _state["jpg"] = encode_frame(img, cap)
 
