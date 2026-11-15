@@ -1,13 +1,13 @@
 {
-  "time": "2026-11-15T18:07:12Z",
+  "time": "2026-11-15T18:17:42Z",
   "stage": "s2_walk",
-  "train_alive": true,
-  "pid": "4992",
+  "train_alive": false,
+  "pid": "",
   "gpu": {
-    "temp_c": "73",
-    "vram_mb": "2450",
-    "util": "74",
-    "power_w": "145.59"
+    "temp_c": "58",
+    "vram_mb": "2511",
+    "util": "1",
+    "power_w": "66.95"
   },
   "last_iteration": "",
   "nan_suspect": "no",

@@ -34,6 +34,8 @@ header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; g
 header h1 { font-size:18px; margin:0; }
 header .gpu { color:var(--dim); font-size:12px; }
 main { padding:16px 20px; max-width:1400px; margin:0 auto; }
+.livebox { margin-top:8px; }
+.livebox img { width:100%; max-width:640px; border-radius:8px; background:#000; display:block; }
 .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
 .stages { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
 .stage { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
@@ -51,6 +53,12 @@ pre.report { font:12px/1.45 Consolas,monospace; color:var(--dim); white-space:pr
 </style></head><body>
 <header><h1>🏃 Конвейер обучения G1</h1><span class="gpu" id="gpu"></span><span class="gpu" id="upd"></span></header>
 <main>
+  <div class="card"><b>🔴 LIVE — робот прямо сейчас (свежайший чекпоинт)</b>
+    <div class="livebox">
+      <img id="liveimg" src="/livestream" alt="live stream">
+      <div class="cap" id="livecap">подключение к стриму…</div>
+    </div>
+  </div>
   <div class="card" id="stagesCard"><b>Этапы лестницы</b><div class="stages" id="stages"></div></div>
   <div class="card"><b>Финальные видео</b><div class="vids" id="finals"></div></div>
   <div class="card"><b>Свежие превью (по чекпоинтам)</b><div class="vids" id="previews"></div></div>
@@ -99,6 +107,13 @@ function drawSpark(cv) {
   g.fillText(min.toFixed(1), pad, h-6);
 }
 tick(); setInterval(tick, 15000);
+const liveimg = document.getElementById('liveimg');
+const livecap = document.getElementById('livecap');
+liveimg.onload = () => { livecap.textContent = 'стрим идёт · плашка с этапом и наградой — на самом кадре'; };
+liveimg.onerror = () => {
+  livecap.textContent = 'стрим офлайн — переподключение…';
+  setTimeout(() => { liveimg.src = '/livestream?' + Date.now(); }, 5000);
+};
 </script></body></html>"""
 
 
@@ -199,6 +214,29 @@ class H(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+        elif path.startswith("/livestream"):
+            # прокси MJPEG-потока с live_stream (:8081) — один порт для браузера
+            import urllib.request
+            try:
+                upstream = urllib.request.urlopen(
+                    "http://127.0.0.1:8081/stream", timeout=10)
+            except Exception:
+                self.send_response(502); self.end_headers(); return
+            self.send_response(200)
+            self.send_header("Content-Type",
+                             upstream.headers.get("Content-Type",
+                                                  "multipart/x-mixed-replace; boundary=frame"))
+            self.end_headers()
+            try:
+                while True:
+                    chunk = upstream.read(8192)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                upstream.close()
         elif path.startswith("/videos/"):
             rel = path[len("/videos/"):]
             fp = os.path.normpath(os.path.join(VIDEOS, rel))
