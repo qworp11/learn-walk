@@ -35,6 +35,7 @@
     "max_iterations": 6000,
     "overrides": {},
     "env_overrides": {},
+    "init_from": {"stage": "s2_walk"},
     "seed": 0
   },
 
@@ -44,6 +45,7 @@
     "max_iterations": 6000,
     "overrides": {},
     "env_overrides": {},
+    "init_from": {"stage": "s3_run"},
     "seed": 0
   },
 
@@ -53,6 +55,7 @@
     "max_iterations": 6000,
     "overrides": {},
     "env_overrides": {},
+    "init_from": {"stage": "s3_run"},
     "seed": 0
   },
 
@@ -71,6 +74,7 @@
     "max_iterations": 6000,
     "overrides": {},
     "env_overrides": {},
+    "init_from": {"stage": "s6_fall"},
     "seed": 0
   },
 
@@ -80,6 +84,7 @@
     "max_iterations": 8000,
     "overrides": {},
     "env_overrides": {},
+    "init_from": {"stage": "s2_walk"},
     "seed": 0
   }
 }

@@ -50,8 +50,9 @@ def main():
     }
     env_overrides = {"trajectory_path": npz, **c.get("env_overrides", {})}
 
-    # auto-resume: продолжаем ПОСЛЕДНИЙ запуск этапа, если в нём есть чекпоинты
-    # (иначе watchdog после падения начал бы обучение с нуля)
+    # выбор стартовой точки:
+    # 1) свои чекпоинты → обычный resume (продолжить)
+    # 2) cfg.init_from = {"stage": ...} → warm-start от чекпоинта другого этапа
     stage_dir = LOGROOT / stage
     resume = None
     runs = sorted(stage_dir.glob("run_*"), key=lambda p: p.name) if stage_dir.exists() else []
@@ -63,6 +64,21 @@ def main():
             resume = str(pts[-1])
             print(f"RESUME: {run_dir.name} <- {resume}", flush=True)
             break
+    warm_start = False
+    if resume is None:
+        init = c.get("init_from")
+        if init:
+            src_dir = LOGROOT / init["stage"]
+            src_runs = sorted(src_dir.glob("run_*"), key=lambda p: p.name) if src_dir.exists() else []
+            for cand in reversed(src_runs):
+                if (cand / "TRAIN_DONE").exists() or True:  # берём самый свежий чекпоинт
+                    pts = sorted(cand.glob("model_*.pt"),
+                                 key=lambda p: int(p.stem.split("_")[1]) if p.stem[6:].isdigit() else -1)
+                    if pts:
+                        resume = str(pts[-1])
+                        warm_start = True
+                        print(f"WARM-START: {init['stage']}/{cand.name} <- {resume}", flush=True)
+                        break
     if resume is None:
         run_dir = stage_dir / f"run_{next_run(stage_dir)}"
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -81,9 +97,11 @@ def main():
     print("RUN:", " ".join(cmd), flush=True)
     (run_dir / "cmd.json").write_text(json.dumps({
         "stage": stage, "cmd": cmd, "overrides": overrides,
-        "env_overrides": env_overrides}, indent=2))
+        "env_overrides": env_overrides, "warm_start": warm_start}, indent=2))
+    env = dict(os.environ, HLC_WARM_START="1" if warm_start else "0")
     with (run_dir / "train_stdout.log").open("w") as logf:
-        rc = subprocess.call(cmd, stdout=logf, stderr=subprocess.STDOUT)
+        rc = subprocess.call(cmd, stdout=logf, stderr=subprocess.STDOUT,
+                             env=env)
     if rc == 0:
         (run_dir / "TRAIN_DONE").touch()  # маркер штатного завершения
     return rc

@@ -7,3 +7,6 @@ s1_balance: финальное видео готово
 === ОРКЕСТРАТОР старт 2026-11-15T15:17:09Z ===
 этапы: s2_walk s2_walk_run_a s3_run s3_sprint s4_jump s6_fall s6_fall2 s8_dance
 [15:17] --- этап s2_walk ---
+s2_walk: TRAIN_DONE ✓
+s2_walk: финальное видео готово
+[17:31] --- этап s2_walk_run_a ---
