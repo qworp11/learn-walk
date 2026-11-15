@@ -62,6 +62,26 @@ def build_scene():
     return spec.compile()
 
 
+def enable_uniform_starts():
+    """Стрим: стартовать эпизоды со случайного места клипа.
+
+    play-режим всегда начинает с кадра 0 — у walk1 это пауза актёра в первые
+    4 секунды (зритель видит «2 шага и стоит»). uniform-семплирование
+    разбрасывает старты по всему клипу.
+    """
+    import gc
+
+    from mujoco_playground.tasks.whole_body.tracking import motion_command
+
+    n = 0
+    for o in gc.get_objects():
+        if isinstance(o, motion_command.MotionReferenceProducer):
+            o._sampling_mode = "uniform"
+            n += 1
+    print(f"stream: uniform-старты включены ({n} producer)", flush=True)
+    return n
+
+
 def _font():
     from PIL import ImageFont
 
@@ -168,6 +188,7 @@ def rollout_loop():
                     venv = vecenv_wrapper.RslRlVecEnvWrapper(
                         env, clip_actions=agent_cfg.clip_actions,
                         cfg=entry.runner_cfg.vecenv_wrapper_cfg)
+                    enable_uniform_starts()
                     cur_stage = stage
                     ep_rew, ep_steps = 0.0, 0
                     print("stream: env готов,", stage, motion, flush=True)
