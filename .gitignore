@@ -8,4 +8,18 @@ results/checkpoints/*.pt.tmp
 logs/
 *.mp4
 *.gif
-# Крупные бинарные датасеты в git не нужны, но csv маленькие — храним для воспроизводимости
+# Моции LAFAN1: лицензия запрещает распространение производных
+# (в т.ч. ретаргетированных на G1) — в публичный git не кладём
+data/motions/
+*.npz
+
+# Артефакты обучения: восстанавливаются тренировкой, в git не нужны
+*.pt
+*.npy
+events.out.tfevents.*
+results/commit_msg.txt
+
+# Vendored референс-фреймворк (research-заметки, не наш код)
+research/reaf_wheel/
+research/reaf_sim-1.0.1-py3-none-any.whl
+research/reaf_sim-1.0.1.dist-info/
