@@ -93,9 +93,9 @@
     "nworld": 1024,
     "max_iterations": 4000,
     "overrides": {},
-    "env_overrides": {},
+    "env_overrides": {"play": true},
     "init_from": {"stage": "s1_balance"},
     "seed": 0,
-    "note": "S9: присед-сед. Референс синтезирован кодом (tools/hlc/make_sit_motion.py), без лицензий."
+    "note": "S9: присед-сед. Референс синтезирован кодом (tools/hlc/make_sit_motion.py), без лицензий. Попытка 3: play=true - курс 'всегда с кадра 0' (эпизод от стойки, присед достигается вместе с референсом; спавн-взрыв из приседа невозможен). Условия совпадают с игрой (play=True)."
   }
 }
