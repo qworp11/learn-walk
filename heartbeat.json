@@ -1,17 +1,17 @@
 {
-  "time": "2026-11-15T21:15:29Z",
-  "stage": "s3_run",
-  "train_alive": true,
-  "pid": "34021",
+  "time": "2026-11-16T17:57:43Z",
+  "stage": "s8_dance",
+  "train_alive": false,
+  "pid": "",
   "gpu": {
     "temp_c": "58",
-    "vram_mb": "6560",
-    "util": "6",
-    "power_w": "67.38"
+    "vram_mb": "1345",
+    "util": "5",
+    "power_w": "67.08"
   },
   "last_iteration": "",
   "nan_suspect": "no",
   "restarts": "0",
-  "run_dir": "/root/hlc-logs/s3_run/run_0",
-  "iteration_count": "0\n0"
+  "run_dir": "/root/hlc-logs/s8_dance/run_0",
+  "iteration_count": "8000"
 }

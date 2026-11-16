@@ -86,5 +86,16 @@
     "env_overrides": {},
     "init_from": {"stage": "s2_walk"},
     "seed": 0
+  },
+
+  "s9_sit": {
+    "motion": "sit_synth",
+    "nworld": 1024,
+    "max_iterations": 4000,
+    "overrides": {},
+    "env_overrides": {},
+    "init_from": {"stage": "s1_balance"},
+    "seed": 0,
+    "note": "S9: присед-сед. Референс синтезирован кодом (tools/hlc/make_sit_motion.py), без лицензий."
   }
 }

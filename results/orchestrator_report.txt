@@ -13,3 +13,21 @@ s2_walk: финальное видео готово
 s2_walk_run_a: TRAIN_DONE ✓
 s2_walk_run_a: финальное видео готово
 [21:11] --- этап s3_run ---
+s3_run: TRAIN_DONE ✓
+s3_run: финальное видео готово
+[00:07] --- этап s3_sprint ---
+s3_sprint: TRAIN_DONE ✓
+s3_sprint: финальное видео готово
+[02:49] --- этап s4_jump ---
+s4_jump: TRAIN_DONE ✓
+s4_jump: финальное видео готово
+[05:31] --- этап s6_fall ---
+s6_fall: TRAIN_DONE ✓
+s6_fall: финальное видео готово
+[08:09] --- этап s6_fall2 ---
+s6_fall2: TRAIN_DONE ✓
+s6_fall2: финальное видео готово
+[13:37] --- этап s8_dance ---
+s8_dance: TRAIN_DONE ✓
+s8_dance: финальное видео готово
+=== ОРКЕСТРАТОР конец 2026-11-16T17:49:56Z ===
