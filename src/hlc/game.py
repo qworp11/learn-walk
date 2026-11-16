@@ -321,8 +321,8 @@ def autotest():
     terr_full = ["flat", "bumps", "wall"]
     terr_half = ["holes", "rock", "rough"]
     skills_full = ["stand", "walk", "sprint", "run", "jump", "fall",
-                   "getup", "dance"]
-    skills_half = ["stand", "walk", "jump"]
+                   "getup", "dance", "sit"]
+    skills_half = ["stand", "walk", "jump", "sit"]
     plan = [(t, skills_full) for t in terr_full] + \
            [(t, skills_half) for t in terr_half]
 

@@ -87,7 +87,12 @@ def main():
     # двухпанельный режим: слева политика (--qpos), справа референс
     if args.compare_npz:
         gj, gp, gq = qpos_from_npz(args.compare_npz)
-        ref = np.concatenate([gp, gq, gj], axis=1)[: qpos.shape[0]]
+        ref = np.concatenate([gp, gq, gj], axis=1)
+        # референс может быть короче роллаута (роллаут = несколько эпизодов
+        # одного клипа) — зацикливаем референс до длины роллаута
+        if ref.shape[0] < qpos.shape[0]:
+            reps = int(np.ceil(qpos.shape[0] / ref.shape[0]))
+            ref = np.tile(ref, (reps, 1))[: qpos.shape[0]]
         data_b = mujoco.MjData(model)
         cam_b = mujoco.MjvCamera()
         try:
