@@ -219,6 +219,12 @@ def visual_model():
     import mujoco_playground.robots.g1.sim.scene as scene_mod
 
     spec = scene_mod.g1_scene_spec()
+    # офскрин-фреймбуфер должен вмещать рендер игры, иначе Renderer
+    # падает: "Image width 800 > framebuffer width 640"
+    spec.visual.global_.offwidth = max(spec.visual.global_.offwidth,
+                                       RENDER_W)
+    spec.visual.global_.offheight = max(spec.visual.global_.offheight,
+                                        RENDER_H)
     return spec.compile()
 
 
