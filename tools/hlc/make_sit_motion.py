@@ -54,12 +54,8 @@ def main():
                 v = knee
             elif "ankle_pitch" in nm:
                 v = ankle
-            elif "hip_roll" in nm:
-                v = 0.10
-            elif "hip_yaw" in nm:
-                v = 0.15
             elif "waist_pitch" in nm:
-                v = 0.25
+                v = 0.15
             elif "shoulder_pitch" in nm:
                 v = shoulder
             elif "elbow" in nm:
@@ -93,25 +89,56 @@ def main():
     h_ank = min(X0[i][2] for i in ank_ids)   # высота стопы в стойке
     print(f"стойка: pelvis z={z0:.3f}, ankle z={h_ank:.3f}")
 
-    # --- подбор позы «сидя»: перебор углов, критерий — глубина и симметрия ---
+    # --- подбор позы «сидя»: стульевая глубина, плоская стопа, симметрия ---
+    # Глубокий присед (таз 0.28) срывал обучение: PD-оффсет действий
+    # KNEES_BENT (hip -0.31/knee 0.67) даёт взрывную присадку коленей из
+    # приседа (робот «взлетает» против референса, done за 0-4 шага), плюс
+    # корневые контакты бедро-таз в награде self_collisions (вес -10).
+    # Стульевая глубина ~0.42 м: без корневых контактов, вдвое меньше
+    # энергия коленей, всё ещё выглядит как полноценный присед-сед.
+    ank_j = [j for j, nm in enumerate(names) if "ankle_pitch" in nm][0]
+
+    dval = mujoco.MjData(model)
+    pid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "pelvis")
+
+    def root_contacts(pose, z):
+        """Имена тел, контактирующих с тазом в данной позе (ловушка
+        награды self_collisions: таз vs бёдра при глубоком седе)."""
+        dval.qpos[:3] = [0.0, 0.0, z]
+        dval.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]
+        dval.qpos[7:] = pose
+        mujoco.mj_forward(model, dval)
+        out = []
+        for i in range(dval.ncon):
+            c = dval.contact[i]
+            b1, b2 = model.geom_bodyid[c.geom1], model.geom_bodyid[c.geom2]
+            if b1 == pid or b2 == pid:
+                out.append(model.body(b2 if b1 == pid else b1).name)
+        return out
+
     best = None
-    for hip in np.arange(-1.4, -2.05, -0.2):
-        for knee in np.arange(1.2, 2.25, 0.2):
-            for ankle in np.arange(0.0, 0.55, 0.1):
-                p = make_pose(hip, knee, ankle, 0.0)
-                X, _ = fk(z0, p)
-                la = X[ank_ids[0]][2] - z0   # вертикальный офсет стопы
-                ra = X[ank_ids[1]][2] - z0
-                z_sit = h_ank - min(la, ra)
-                asym = abs(la - ra)
-                if not (0.20 <= z_sit <= 0.45) or asym > 0.05:
-                    continue
-                # чем ниже таз (глубже сед), тем лучше; штраф за асимметрию
-                score = z_sit + asym
-                if best is None or score < best[0]:
-                    best = (score, hip, knee, ankle, p, z_sit)
+    for hip in np.arange(-1.30, -0.65, 0.05):
+        for knee in np.arange(0.90, 2.25, 0.05):
+            ankle_f = -(hip + knee)      # плоская стопа: сумма питчей = 0
+            lo, hi = ranges[ank_j]
+            if not (lo <= ankle_f <= hi):
+                continue
+            p = make_pose(hip, knee, ankle_f, 0.0)
+            X, _ = fk(z0, p)
+            la = X[ank_ids[0]][2] - z0   # вертикальный офсет стопы
+            ra = X[ank_ids[1]][2] - z0
+            z_sit = h_ank - min(la, ra)
+            asym = abs(la - ra)
+            if not (0.34 <= z_sit <= 0.48) or asym > 0.05:
+                continue
+            if root_contacts(p, z_sit):
+                continue                 # бедро упирается в таз — пропустить
+            score = abs(z_sit - 0.42) + asym
+            if best is None or score < best[0]:
+                best = (score, hip, knee, ankle_f, p, z_sit)
     if best is None:
-        raise SystemExit("не нашёл позу сидя в диапазоне z 0.20-0.45 — СТОП")
+        raise SystemExit("не нашёл позу сидя z 0.34-0.48 без корневых "
+                         "контактов — СТОП")
     _, hip, knee, ankle, sit_pose, z_sit = best
     print(f"поза сидя: hip={hip:.2f} knee={knee:.2f} ankle={ankle:.2f} "
           f"-> pelvis z={z_sit:.3f}")
@@ -127,6 +154,13 @@ def main():
     shoulder = -1.2 if fwd >= 0 else 1.2
     sit_pose = make_pose(hip, knee, ankle, shoulder)
     print(f"плечи: знак {shoulder:+.1f} (кисти вперед)")
+
+    # валидация: корневые контакты (таз vs бёдра) в позе сидя обязаны
+    # отсутствовать — иначе награда self_collisions структурно душит удержание
+    rc = root_contacts(sit_pose, z_sit)
+    if rc:
+        raise SystemExit(f"корневые контакты в позе сидя: {rc} — СТОП")
+    print("корневые контакты в позе сидя: НЕТ (ок)")
 
     # --- таймлайн ---
     T = 7.0

@@ -22,6 +22,23 @@ wp.config.enable_mathdx_solver = False
 wp.config.enable_mathdx_gemm = False
 wp.config.kernel_cache_dir = "/root/wp_kernel_cache"
 
+import mujoco_warp as _mjw  # noqa: E402
+
+_orig_put_data = _mjw.put_data
+
+
+def _put_data_bigger(mjm, mjd, **kw):
+    """reaf конфигурирует буферы контактов впритык (nconmax=35, njmax=350),
+    а присед генерирует больше контактов — narrowphase overflow молча
+    выбрасывает контакты и портит физику. Поднимаем с запасом
+    (память ~десятки МБ на nworld=1024)."""
+    kw["nconmax"] = max(kw.get("nconmax") or 0, 128)
+    kw["njmax"] = max(kw.get("njmax") or 0, 768)
+    return _orig_put_data(mjm, mjd, **kw)
+
+
+_mjw.put_data = _put_data_bigger
+
 from absl import app  # noqa: E402
 
 from mujoco_playground.rl.rsl_rl import train as pg_train  # noqa: E402
