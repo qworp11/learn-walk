@@ -113,9 +113,14 @@ if MODE == "specialists":
         del venv, policy
 else:
     venv, policy = game.build_env_and_policy(CK_UNIFIED, NPZ)
-    for sk in MASTER:
+    seen = {}
+    for s in SEGM["segments"]:
+        if s["skill"] not in seen:
+            seen[s["skill"]] = s["start"]   # первая реплика скилла
+    for sk in ["stand", "walk", "run", "sprint", "jump", "fall", "dance",
+               "sit"]:
         off = OFF.get(sk, 1000)
-        m = run_skill(venv, policy, MASTER[sk]["start"] + off)
+        m = run_skill(venv, policy, seen[sk] + off)
         print(f"{sk:7s}: rew={m['rew']:.3f} падения={m['fall']*100:.0f}% "
               f"робот {m['dist']:.2f} м / клип {m['clip']:.2f} м z={m['z']:.2f}",
               flush=True)
