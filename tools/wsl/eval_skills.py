@@ -41,20 +41,39 @@ def pose(venv):
     q = venv.unwrapped.device_layer.sim.data.qpos
     return q[0, :3].detach().cpu().numpy().copy()
 
+def teleport_ref(venv, frame):
+    """Телепорт робота в позу референса кадра frame (копия reset.py)."""
+    env = venv.unwrapped
+    prod = env.task_layer.get_component_by_name("motion")
+    prod.time_steps[:] = frame
+    m = prod.motion
+    t = int(prod.time_steps[0].item())
+    data = env.device_layer.sim.data
+    dev = data.qpos.device
+    root_pos = m.body_pos_w[t, 0].to(dev)
+    root_quat = m.body_quat_w[t, 0].to(dev)
+    root_lin = m.body_lin_vel_w[t, 0].to(dev)
+    root_ang = m.body_ang_vel_w[t, 0].to(dev)
+    jp = m.joint_pos[t].to(dev)
+    jv = m.joint_vel[t].to(dev)
+    data.qpos[:, 0:3] = root_pos.to(data.qpos.dtype)
+    data.qpos[:, 3:7] = root_quat.to(data.qpos.dtype)
+    data.qpos[:, 7:7 + jp.shape[-1]] = jp.to(data.qpos.dtype)
+    data.qvel[:, 0:3] = root_lin.to(data.qvel.dtype)
+    from mujoco_playground.tasks.whole_body.tracking import motion_command \
+        as mc
+    ang_local = mc.pg_math.quat_rotate_inverse(root_quat, root_ang)
+    data.qvel[:, 3:6] = ang_local.to(data.qvel.dtype)
+    data.qvel[:, 6:6 + jv.shape[-1]] = jv.to(data.qvel.dtype)
+    env.device_layer.forward()
+
 def run_skill(venv, policy, frame, steps=400):
     tl = venv.unwrapped.task_layer
     prod = tl.get_component_by_name("motion")
-    mr = next(o for o in tl._resettable_objects
-              if hasattr(o, "_teleport_to_reference"))
     rews, zs, dists = [], [], []
     for ep in range(2):
         venv.reset()
-        prod.time_steps[:] = frame
-        mr._teleport_to_reference(torch.ones(1, dtype=torch.bool))
-        try:
-            venv.unwrapped.device_layer.forward()
-        except Exception:
-            pass
+        teleport_ref(venv, frame)
         obs = game.steering.refresh_obs(venv)
         p0 = pose(venv)
         fall = 0
