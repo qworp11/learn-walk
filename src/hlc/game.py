@@ -4,11 +4,17 @@
   wsl -d Ubuntu-22.04 -u root -- bash "/mnt/g/LEARN WALK/tools/wsl/run_game.sh"
 
 Управление:
-  W — ходьба            SHIFT+W — спринт        E — бег
-  ПРОБЕЛ — прыжок       CTRL — сесть (после дообучения s9_sit)
+  МЫШЬ — камера (захват курсора)     колесо — зум
+  W — идти вперёд (куда смотрит камера)   SHIFT+W — спринт   E — бег
+  A/D (стоя) — медленный поворот на месте
+  ПРОБЕЛ — прыжок       CTRL — сесть
   F — упасть            G — встать              Q — танец
-  A / D — камера влево/вправо   колесо — зум    T — сменить ландшафт
-  H — помощь            ESC — выход
+  T — сменить ландшафт  H — помощь              ESC — выход
+
+Управление бесшовное: при смене скилла робот НЕ телепортируется —
+поза передаётся из предыдущего скилла, а направление ходьбы
+задаётся виртуальным путём (steering.py), за которым политика
+гонится так же, как в тренировке за путём клипа.
 
 Ландшафты: РОВНАЯ / УХАБЫ / ЯМЫ / СКАЛЫ / НЕРОВНАЯ / СТЕНА.
 Ландшафт патчится и в ФИЗИКУ env (через g1_scene_spec), и в картинку —
@@ -21,6 +27,7 @@ Autotest: GAME_AUTOTEST=1 python game.py — гоняет матрицу ски�
 import dataclasses
 import glob
 import json
+import math
 import os
 import re
 import sys
@@ -59,6 +66,11 @@ _mjw.put_data = _put_data_bigger
 import mujoco  # noqa: E402
 from mujoco import Renderer  # noqa: E402
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import steering  # noqa: E402
+
+steering.install()  # стирринг референса + зацикливание клипов (идемпотентно)
+
 LOGROOT = "/root/hlc-logs"
 WIN_W, WIN_H = 960, 540      # окно игры
 RENDER_W, RENDER_H = 800, 450  # рендер EGL (растягиваем в окно)
@@ -80,6 +92,12 @@ SKILLS = {
     "dance": ("s8_dance", "ТАНЕЦ", True, 1200),
     "sit": ("s9_sit", "СЕСТЬ", True, 600),  # появится после дообучения
 }
+LOCO_SKILLS = {"walk", "run", "sprint"}  # для них клип перематывается на шаг
+# sit_synth.npz: 0-75 стойка, 75-125 спуск, 125-225 сидение, 225-300 подъём,
+# 300+ стойка. Пока CTRL держится - зажимаем клип на 225 (сидит бесконечно),
+# при отпускании отпускаем зажим - родная политика сама поднимает робота.
+SIT_HOLD_FRAME = 225
+SIT_RISE_DONE = 310
 STICKY = {k for k, v in SKILLS.items() if v[2]}
 
 
@@ -238,10 +256,17 @@ def build_env_and_policy(ckpt, traj):
     agent_cfg = entry.runner_cfg
     agent_cfg.nworld = 1
     env = entry.env_builder(nworld=1, device="cpu",
-                            trajectory_path=traj or None, play=True)
+                            trajectory_path=traj or None, play=True,
+                            episode_length_secs=3600.0)
     venv = vecenv_wrapper.RslRlVecEnvWrapper(
         env, clip_actions=agent_cfg.clip_actions,
         cfg=agent_cfg.vecenv_wrapper_cfg)
+    # ИГРОВОЙ режим: никаких скрытых сбросов. Терминаторы трекинга
+    # (z/орientации/EE) стреляют на легитимных для игры состояниях
+    # (mid-stride старт, пересадка позы) и дёргают авто-reset - телепорт,
+    # которого быть не должно. Падения игра детектит сама (pelvis z < 0.45
+    # -> getup), урон от отключения нет.
+    env.task_layer._termination_checkers = []
     runner = rsl_runners.OnPolicyRunner(
         venv, dataclasses.asdict(agent_cfg), device="cpu")
     runner.load(checkpoint.read_checkpoint(ckpt),
@@ -250,6 +275,9 @@ def build_env_and_policy(ckpt, traj):
                 map_location="cpu")
     policy = runner.get_inference_policy(device="cpu")
     return venv, policy
+
+
+_PRODS = {}  # key -> MotionReferenceProducer со steer-состоянием
 
 
 def load_skill(key):
@@ -262,6 +290,7 @@ def load_skill(key):
     print(f"game: загрузка скилла {key} ({ckpt})", flush=True)
     t0 = time.time()
     venv, policy = build_env_and_policy(ckpt, stage_traj(run))
+    _PRODS[key] = steering.attach(venv)
     print(f"game: скилл {key} готов за {time.time() - t0:.0f}с", flush=True)
     return venv, policy
 
@@ -348,9 +377,23 @@ def autotest():
                     continue
                 venv, policy = got
                 obs_td, _ = venv.reset()
+                prod = _PRODS.get(key)
+                # локомоция на ровном полу: фазовый старт + виртуальный путь,
+                # в конце проверяем, что робот РЕАЛЬНО прошёл (клип не заглушка)
+                loco_check = (key in LOCO_SKILLS and terr == "flat"
+                              and prod is not None)
+                if loco_check:
+                    steering.begin(venv, (0.0, 0.0), 0.0,
+                                   t_start=steering.pick_start_frame(prod))
+                    obs_td = steering.refresh_obs(venv)
                 ok = True
                 msg = ""
-                for step in range(100):
+                # локомоция стартует с запасом на раскачку (5 с) - ей нужно
+                # длинное окно, чтобы дойти до шага и пройти его
+                n_steps = 450 if loco_check else 100
+                for step in range(n_steps):
+                    if loco_check:
+                        steering.advance_pin(prod)
                     with torch.no_grad():
                         a = policy(obs_td)
                     if not torch.isfinite(a).all().item():
@@ -363,6 +406,13 @@ def autotest():
                         break
                     if done and key not in ("jump", "fall", "getup"):
                         obs_td, _ = venv.reset()
+                if loco_check and ok:
+                    q = venv.unwrapped.device_layer.sim.data.qpos
+                    xy = q[0, :2].detach().cpu().numpy()
+                    d = float(np.linalg.norm(xy))
+                    if d < 0.5:
+                        ok, msg = False, \
+                            f"заглушка: прошёл лишь {d:.2f} м за 9 с"
                 results.append((terr, key, "PASS" if ok else "FAIL", msg))
             except Exception as e:
                 results.append((terr, key, "FAIL", f"{type(e).__name__}: {e}"))
@@ -385,11 +435,13 @@ class Camera:
         self.distance = 3.2
         self.elevation = -12.0
 
+    def rotate(self, dx, dy):
+        """Мышь: dx вправо -> камера вправо, dy вниз -> взгляд вниз."""
+        self.azimuth -= dx * 0.25
+        self.elevation = max(-60.0, min(-4.0, self.elevation - dy * 0.15))
+
     def update(self, keys, dt):
-        if keys.get("a"):
-            self.azimuth += 60 * dt
-        if keys.get("d"):
-            self.azimuth -= 60 * dt
+        pass  # камера управляется мышью; A/D - поворот робота на месте
 
 
 # ---------------------------------------------------------------- main ----
@@ -429,8 +481,8 @@ def main():
     except Exception:
         hud_font = pygame.font.Font(None, 26)
         small_font = pygame.font.Font(None, 20)
-    HINT = ("W ходьба · SHIFT+W спринт · E бег · ПРОБЕЛ прыжок · CTRL сесть · "
-            "F упасть · G встать · Q танец · A/D камера · T ландшафт · "
+    HINT = ("МЫШЬ камера · W идти · SHIFT+W спринт · E бег · ПРОБЕЛ прыжок · "
+            "CTRL сесть · F упасть · G встать · Q танец · T ландшафт · "
             "H помощь · ESC выход")
 
     model = visual_model()
@@ -443,6 +495,22 @@ def main():
     renderer = Renderer(model, height=RENDER_H, width=RENDER_W)
     cam = mujoco.MjvCamera()
     camera = Camera()
+    torso_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "torso_link")
+    if torso_id < 0:
+        torso_id = pelvis_id
+
+    def _yaw_of(quat):
+        w, x, y, z = quat[0], quat[1], quat[2], quat[3]
+        return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+
+    def _sync_visual_from_sim(vv):
+        """Визуальная модель = текущее состояние сима (после пересадки)."""
+        q = vv.unwrapped.device_layer.sim.data.qpos
+        data.qpos[:] = q.detach().cpu().numpy()[0, :nq]
+        mujoco.mj_forward(model, data)
+
+    pygame.event.set_grab(True)
+    pygame.mouse.set_visible(False)
 
     mgr = SkillManager()
     cur = None            # активный скилл
@@ -452,6 +520,8 @@ def main():
     fps_show = 0.0
     show_help = False
     sit_ready = skill_ready("sit")
+    forced_skill = None  # принудительный скилл после done (упал -> встать)
+    sit_armed = False    # CTRL держится: клип sit зажат в сидячей фазе
 
     keymap = {
         pygame.K_w: "w", pygame.K_a: "a", pygame.K_d: "d",
@@ -495,6 +565,8 @@ def main():
             elif ev.type == pygame.MOUSEWHEEL:
                 camera.distance = min(8.0, max(
                     1.6, camera.distance - 0.4 * ev.y))
+            elif ev.type == pygame.MOUSEMOTION and pygame.event.get_grab():
+                camera.rotate(ev.rel[0], ev.rel[1])
         ks = pygame.key.get_pressed()
         keys = {}
         for code, name in keymap.items():
@@ -515,12 +587,28 @@ def main():
             keys["ctrl"] = True
 
         # скилл: залипающий не меняем, пока нет события/нажатой клавиши управления
-        want = desired_skill(events, keys, sit_ready)
+        want = forced_skill if forced_skill is not None else \
+            desired_skill(events, keys, sit_ready)
         held_move = any(keys.get(k) for k in ("w", "e", "q")) or \
             (keys.get("ctrl") and sit_ready)
-        if cur in STICKY and sticky_left > 0 and \
+        if forced_skill is None and cur in STICKY and sticky_left > 0 and \
                 not any(k in SKILLS for k in events) and not held_move:
             want = cur
+        forced_skill = None
+        # лежачий робот: всё, кроме доигрывающего падения и getup,
+        # сначала встаёт (упавший танец/ходьба не должны барахтаться)
+        z_pelvis = float(data.xpos[pelvis_id][2])
+        pinned = (cur in STICKY and sticky_left > 0)
+        if obs_td is not None and z_pelvis < 0.45 and want != "getup" and \
+                not (pinned and cur == "fall"):
+            want = "getup"
+        # сидящий робот: другой скилл берём только ПОСЛЕ подъёма родным
+        # клипом sit (из кресла сразу ходить/танцевать - падение)
+        sit_release = False
+        if obs_td is not None and cur == "sit" and 0.45 <= z_pelvis < 0.68 \
+                and want != "sit":
+            want = "sit"
+            sit_release = True
         if want != cur or obs_td is None:
             if want not in mgr.live:
                 screen.fill((10, 12, 18))
@@ -528,6 +616,8 @@ def main():
                                     True, (255, 200, 80))
                 screen.blit(t, (WIN_W // 2 - t.get_width() // 2, WIN_H // 2))
                 pygame.display.flip()
+            old_venv = mgr.live[cur][0] \
+                if cur is not None and cur in mgr.live else None
             got = mgr.get(want, protect=cur)
             if got is None:
                 cur, sticky_left, obs_td = None, 0, None
@@ -535,6 +625,29 @@ def main():
             else:
                 venv, _ = got
                 obs_td, _ = venv.reset()
+                # бесшовность: поза робота переезжает из старого скилла,
+                # виртуальный путь стартует там, где он стоит, курсом,
+                # куда он смотрит (телепорта в кадр клипа больше нет)
+                steering.transplant(venv, old_venv)
+                _sync_visual_from_sim(venv)
+                # локомоция: перематываем клип на начало шага (клипы LAFAN
+                # начинаются с долгой стоячей раскачки - иначе скилл
+                # выглядит мёртвым); остальные скиллы - с кадра 0
+                if want in LOCO_SKILLS:
+                    t_start = steering.pick_start_frame(_PRODS[want])
+                elif want == "sit":
+                    t_start = 60  # sit_synth: стойка 0-75, спуск с 75
+                else:
+                    t_start = None
+                steering.begin(venv, (data.xpos[torso_id][0],
+                                      data.xpos[torso_id][1]),
+                               _yaw_of(data.xquat[torso_id]),
+                               t_start=t_start)
+                # obs от reset описывают состояние ДО begin(): пересадка позы
+                # и перемотка клипа меняют референс - пересчитываем obs из
+                # реального состояния, иначе первое действие политика
+                # рассчитает на устаревшую картину мира
+                obs_td = steering.refresh_obs(venv)
                 cur, sticky_left = want, SKILLS[want][3]
                 ep_rew = ep_steps = 0
                 print(f"game: скилл -> {want}", flush=True)
@@ -543,6 +656,42 @@ def main():
         t0 = time.time()
         if obs_td is not None:
             venv, policy = mgr.live[cur]
+            prod = _PRODS.get(cur)
+            if prod is not None and prod._steer["on"]:
+                if keys.get("w") or keys.get("e"):
+                    steering.update(prod, math.radians(camera.azimuth),
+                                    steering.MAX_RATE_WALK)
+                elif keys.get("a") or keys.get("d"):
+                    # поворот на месте: A - влево (CCW), D - вправо
+                    steering.turn_in_place(
+                        prod, steering.MAX_RATE_STAND if keys.get("a")
+                        else -steering.MAX_RATE_STAND)
+                # морковку ведём только для локомоции: sit/dance/jump стоят
+                # на месте, их путь не должен уползать
+                if cur in LOCO_SKILLS:
+                    steering.advance_pin(
+                        prod,
+                        speed={"run": 0.9, "sprint": 1.3}.get(
+                            cur, steering.CARROT_WALK),
+                        robot_xy=(data.xpos[torso_id][0],
+                                  data.xpos[torso_id][1]))
+                steering.guard(prod, (data.xpos[torso_id][0],
+                                      data.xpos[torso_id][1]))
+                if cur == "sit" and prod is not None:
+                    # сидение: пока CTRL держится (и не запрошен другой
+                    # скилл) - зажимаем клип в сидячей фазе; на отпускании
+                    # или запросе другого скилла даём клипу доиграть подъём
+                    ts = int(prod.time_steps[0].item())
+                    T_sit = int(prod.motion.time_step_total)
+                    if keys.get("ctrl") and not sit_release:
+                        sit_armed = True
+                        if ts > SIT_HOLD_FRAME:
+                            prod.time_steps[:] = SIT_HOLD_FRAME
+                    elif sit_armed or sit_release:
+                        sit_armed = False
+                        need = (SIT_RISE_DONE - ts) if ts <= SIT_RISE_DONE \
+                            else (SIT_RISE_DONE + T_sit - ts)
+                        sticky_left = max(sticky_left, need + 20)
             with torch.no_grad():
                 action = policy(obs_td)
             obs_td, rew, done, _ = venv.step(action)
@@ -553,10 +702,13 @@ def main():
             q = venv.unwrapped.device_layer.sim.data.qpos
             data.qpos[:] = q.detach().cpu().numpy()[0, :nq]
             mujoco.mj_forward(model, data)
-            if done or ep_steps >= MAX_EP_STEPS or \
-                    (cur in STICKY and sticky_left <= 0):
-                obs_td, _ = venv.reset()
-                sticky_left = SKILLS[cur][3] if cur in STICKY else 0
+            if done:
+                # без телепорта: упал -> встать, иначе -> стойка; скилл
+                # сменится на следующей итерации с пересадкой позы
+                if data.xpos[pelvis_id][2] < 0.45 and cur != "getup":
+                    forced_skill = "getup"
+                else:
+                    forced_skill = "stand"
                 ep_rew = ep_steps = 0
             camera.update(keys, 1 / 50)
             cam.lookat[:] = [data.xpos[pelvis_id][0],
@@ -585,7 +737,7 @@ def main():
                 data.xpos[pelvis_id][2] < 0.45 and cur not in ("fall", "getup"))
         line = f"{name} · {TERRAIN_RU[CURRENT_TERRAIN]} · {fps_show:.0f} fps"
         if obs_td is not None:
-            line += f" · награда {ep_rew:.1f}"
+            line += f" · награда {ep_rew / max(ep_steps, 1):.2f}"
         if fell:
             line += " · УПАЛ (G — встать)"
         if cur is None and want == "sit":
@@ -595,15 +747,16 @@ def main():
                     (12, WIN_H - 26))
         if show_help:
             help_lines = [
-                "W — ходьба (удерживай), отпусти — стой",
-                "SHIFT+W — спринт, E — бег",
-                "ПРОБЕЛ — прыжок, F — упасть, G — встать",
-                "CTRL — сесть (когда s9_sit дообучится), Q — танец",
-                "A/D — поворот камеры, колесо мыши — зум",
+                "МЫШЬ — камера, колесо — зум (курсор захвачен, ESC — выход)",
+                "W — идти куда смотрит камера, отпусти — стой",
+                "SHIFT+W — спринт, E — бег; A/D стоя — поворот на месте",
+                "ПРОБЕЛ — прыжок, CTRL (держать) — сесть, отпустить — встать",
+                "F — упасть, G — встать, Q — танец. Скиллы бесшовные:",
+                "без телепортов при смене. Старт ходьбы ~5 с (разгон)",
                 "T — сменить ландшафт (6 видов), H — эта помощь",
                 "Скиллы обучены на РОВНОМ полу — ухабы/скалы это настоящий тест!",
             ]
-            panel = pygame.Surface((560, 200), pygame.SRCALPHA)
+            panel = pygame.Surface((560, 226), pygame.SRCALPHA)
             panel.fill((0, 0, 0, 190))
             screen.blit(panel, (12, 44))
             for i, h in enumerate(help_lines):
