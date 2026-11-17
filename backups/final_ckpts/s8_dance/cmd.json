@@ -1,0 +1,29 @@
+{
+  "stage": "s8_dance",
+  "cmd": [
+    "python",
+    "/mnt/g/LEARN WALK/src/hlc/hlc_train.py",
+    "--env",
+    "G1WholeBodyTracking",
+    "--seed",
+    "0",
+    "--logdir",
+    "/root/hlc-logs/s8_dance/run_0",
+    "--env_overrides",
+    "{\"trajectory_path\": \"/mnt/g/LEARN WALK/data/motions/npz_g1/dance2_subject1.npz\"}",
+    "--overrides",
+    "{\"nworld\": 1024, \"max_iterations\": 8000}",
+    "--wp_kernel_cache_dir",
+    "/root/wp_kernel_cache",
+    "--resume_path",
+    "/root/hlc-logs/s2_walk/run_0/model_5499.pt"
+  ],
+  "overrides": {
+    "nworld": 1024,
+    "max_iterations": 8000
+  },
+  "env_overrides": {
+    "trajectory_path": "/mnt/g/LEARN WALK/data/motions/npz_g1/dance2_subject1.npz"
+  },
+  "warm_start": true
+}

@@ -1,0 +1,195 @@
+{
+ "total_frames": 83500,
+ "duration_s": 1670.0,
+ "segments": [
+  {
+   "skill": "stand",
+   "file": "dance1_subject1.npz",
+   "start": 0,
+   "frames": 6574
+  },
+  {
+   "skill": "walk",
+   "file": "walk3_subject1.npz",
+   "start": 6574,
+   "frames": 12330
+  },
+  {
+   "skill": "run",
+   "file": "run2_subject1.npz",
+   "start": 18904,
+   "frames": 12240
+  },
+  {
+   "skill": "sprint",
+   "file": "sprint1_subject2.npz",
+   "start": 31144,
+   "frames": 13655
+  },
+  {
+   "skill": "jump",
+   "file": "jumps1_subject1.npz",
+   "start": 44799,
+   "frames": 12222
+  },
+  {
+   "skill": "fall",
+   "file": "fallAndGetUp2_subject2.npz",
+   "start": 57021,
+   "frames": 8195
+  },
+  {
+   "skill": "dance",
+   "file": "dance2_subject1.npz",
+   "start": 65216,
+   "frames": 11284
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 76500,
+   "frames": 350,
+   "copy": 0
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 76850,
+   "frames": 350,
+   "copy": 1
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 77200,
+   "frames": 350,
+   "copy": 2
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 77550,
+   "frames": 350,
+   "copy": 3
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 77900,
+   "frames": 350,
+   "copy": 4
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 78250,
+   "frames": 350,
+   "copy": 5
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 78600,
+   "frames": 350,
+   "copy": 6
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 78950,
+   "frames": 350,
+   "copy": 7
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 79300,
+   "frames": 350,
+   "copy": 8
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 79650,
+   "frames": 350,
+   "copy": 9
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 80000,
+   "frames": 350,
+   "copy": 10
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 80350,
+   "frames": 350,
+   "copy": 11
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 80700,
+   "frames": 350,
+   "copy": 12
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 81050,
+   "frames": 350,
+   "copy": 13
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 81400,
+   "frames": 350,
+   "copy": 14
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 81750,
+   "frames": 350,
+   "copy": 15
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 82100,
+   "frames": 350,
+   "copy": 16
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 82450,
+   "frames": 350,
+   "copy": 17
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 82800,
+   "frames": 350,
+   "copy": 18
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 83150,
+   "frames": 350,
+   "copy": 19
+  },
+  {
+   "skill": "sit",
+   "file": "sit_synth.npz",
+   "start": 76500,
+   "frames": 7000,
+   "master": true
+  }
+ ]
+}

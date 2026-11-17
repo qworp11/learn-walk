@@ -1,0 +1,30 @@
+{
+  "stage": "s9_sit",
+  "cmd": [
+    "python",
+    "/mnt/g/LEARN WALK/src/hlc/hlc_train.py",
+    "--env",
+    "G1WholeBodyTracking",
+    "--seed",
+    "0",
+    "--logdir",
+    "/root/hlc-logs/s9_sit/run_2",
+    "--env_overrides",
+    "{\"trajectory_path\": \"/mnt/g/LEARN WALK/data/motions/npz_g1/sit_synth.npz\", \"play\": true}",
+    "--overrides",
+    "{\"nworld\": 1024, \"max_iterations\": 4000}",
+    "--wp_kernel_cache_dir",
+    "/root/wp_kernel_cache",
+    "--resume_path",
+    "/root/hlc-logs/s1_balance/run_1/model_3499.pt"
+  ],
+  "overrides": {
+    "nworld": 1024,
+    "max_iterations": 4000
+  },
+  "env_overrides": {
+    "trajectory_path": "/mnt/g/LEARN WALK/data/motions/npz_g1/sit_synth.npz",
+    "play": true
+  },
+  "warm_start": true
+}

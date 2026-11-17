@@ -1,0 +1,29 @@
+{
+  "stage": "s3_sprint",
+  "cmd": [
+    "python",
+    "/mnt/g/LEARN WALK/src/hlc/hlc_train.py",
+    "--env",
+    "G1WholeBodyTracking",
+    "--seed",
+    "0",
+    "--logdir",
+    "/root/hlc-logs/s3_sprint/run_0",
+    "--env_overrides",
+    "{\"trajectory_path\": \"/mnt/g/LEARN WALK/data/motions/npz_g1/sprint1_subject2.npz\"}",
+    "--overrides",
+    "{\"nworld\": 1024, \"max_iterations\": 6000}",
+    "--wp_kernel_cache_dir",
+    "/root/wp_kernel_cache",
+    "--resume_path",
+    "/root/hlc-logs/s3_run/run_0/model_5999.pt"
+  ],
+  "overrides": {
+    "nworld": 1024,
+    "max_iterations": 6000
+  },
+  "env_overrides": {
+    "trajectory_path": "/mnt/g/LEARN WALK/data/motions/npz_g1/sprint1_subject2.npz"
+  },
+  "warm_start": true
+}
