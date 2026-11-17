@@ -1,0 +1,11 @@
+import socket
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.bind(("0.0.0.0", 7777))
+s.settimeout(30)
+print("WSL UDP server on :7777, жду ping...")
+data, addr = s.recvfrom(64)
+print("GOT:", data, "from", addr)
+s.sendto(b"pong", addr)
+data, addr = s.recvfrom(64)
+print("GOT2:", data, "from", addr)
+print("UDP_OK")
